@@ -14,7 +14,7 @@ import os
 # direccion del cluster de mongodb
 uri = os.getenv('MONGO_URI')
 #==== accesos de google cloud storage ====#
-key_json_filename = os.getenv('CRED_GCP')
+key_json_filename = 'nds-proyecto-123-credentials.json'
 credentials = service_account.Credentials.from_service_account_file(
     key_json_filename,
 )
@@ -22,7 +22,7 @@ gcs_client = storage.Client(
     project = credentials.project_id,
     credentials = credentials
 )
-BUCKET_NAME = os.getenv("GCP_BUCKET")
+BUCKET_NAME = fr"bucket-nds-stt-endpoint"
 bucket = gcs_client.get_bucket(BUCKET_NAME)
 
 #==== accesos de Mongo ====#
@@ -31,7 +31,7 @@ bucket = gcs_client.get_bucket(BUCKET_NAME)
 
 client = MongoClient(uri,
                     tls=True,
-                    tlsCertificateKeyFile= os.getenv("CRED_MONGO"))
+                    tlsCertificateKeyFile="mongo_db_certificate.pem")
 db = client['backend-endpoint']
 collection = db['texto-audio']
 

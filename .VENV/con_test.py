@@ -1,6 +1,5 @@
 # %%
-import flask
-from flask import request, jsonify
+from flask import Flask,request, jsonify
 # Librerias de Google para acceder a GCP
 from google.cloud import storage
 from google.oauth2 import service_account
@@ -8,12 +7,14 @@ from google.oauth2 import service_account
 from pymongo import MongoClient
 import pymongo
 import datetime
+import dotenv
+import os
 
 #%%
 # direccion del cluster de mongodb
-uri = "mongodb+srv://cluster-nds.xvuuebe.mongodb.net/?authSource=%24external&authMechanism=MONGODB-X509&retryWrites=true&w=majority"
+uri = os.getenv('MONGO_URI')
 #==== accesos de google cloud storage ====#
-key_json_filename = fr'nds-proyecto-123-credentials.json'
+key_json_filename = os.getenv('CRED_GCP')
 credentials = service_account.Credentials.from_service_account_file(
     key_json_filename,
 )
@@ -21,7 +22,7 @@ gcs_client = storage.Client(
     project = credentials.project_id,
     credentials = credentials
 )
-BUCKET_NAME = fr'bucket-nds-stt-endpoint'
+BUCKET_NAME = os.getenv("GCP_BUCKET")
 bucket = gcs_client.get_bucket(BUCKET_NAME)
 
 #==== accesos de Mongo ====#
@@ -30,24 +31,20 @@ bucket = gcs_client.get_bucket(BUCKET_NAME)
 
 client = MongoClient(uri,
                     tls=True,
-                    tlsCertificateKeyFile=f"mongo_db_certificate.pem")
+                    tlsCertificateKeyFile= os.getenv("CRED_MONGO"))
 db = client['backend-endpoint']
 collection = db['texto-audio']
 
 #%%
-def TXT_read(filename=""):
+def TXT_read(filename=""):                            #Asegurar la funcion de leer archivo .txt
     blob = bucket.blob(filename)
     file_as_string = blob.download_as_string()
-    # data, sample_rate = sf.read(BytesIO(file_as_string))
-    #ipd.Audio(data, rate=sample_rate)
-    #print("SE LEYO AUDIO")
     return "file downloaded"#data, sample_rate
 
 #GCP upload
 def upload_file(filename="", data=None):
     blob = bucket.blob(filename)
     blob.upload_from_string(data)
-
 
 def getCountDocuments():
     try:
@@ -64,17 +61,18 @@ def insertDocument(values):
     except pymongo.errors.DuplicateKeyError:
         return f"Llave duplicada"
     
+app = Flask(__name__)
 
 @app.route('/', methods=["GET"])
 def get_tts():
     query_parameters = request.args
 
     id = query_parameters.get('id')
-    id = int(request.args['id'])
-    lang = query_parameters.get('language')
+    #lang = query_parameters.get('language')
+    lang = os.getenv('LAN')
 
-    if lang == 'spanish':
-        folder = 'audios_es/'
+    if lang == 'spanish':                           #Corregir formato de lang en .env
+        folder = 'audios_es/'                          #revisar formato en GCP
     elif lang == 'english':
         folder = 'audios_en/'
 
@@ -82,15 +80,16 @@ def get_tts():
 
     #gs://bucket-nds-stt-endpoint/audios_es/audio1.wav
     data, sample_rate = TXT_read(file)
-    for fname, transcript in zip([file], asr_model.transcribe(paths2audio_files=[file])):
-        print(f"Audio {fname} reconoció el siguiente texto:", transcript)
-
-    #transcript = "Hola Mundo"
+    #obtengo el nombre del audio reconocido y el transcript en texto; guardo el transcript
+    # for fname, transcript in zip([file], asr_model.transcribe(paths2audio_files=[file])):
+    #     print(f"Audio {fname} reconoció el siguiente texto:", transcript)
+    
+    transcript = "Hola Mundo"
     filename = fr'transcript/input_{id}'
-    val = {'user_id': id,
+    val = {'user_id': id,                                     #Hardcodeado lol
            'uploadDate': datetime.datetime.utcnow(),
            'language': lang,
-           'filename': fr'gs://{BUCKET_NAME}/{filename}.txt',
+           'filename': fr'gs://{BUCKET_NAME}/{filename}.txt', #Cambiar .txt por .wav, tener el bucket correcto
            'textIn': transcript,
            'stage': 2}
     
@@ -99,4 +98,4 @@ def get_tts():
 
     return jsonify([transcript, ret_id])
 
-app.run(host = '0.0.0.0', debug=True, port=8080)
+app.run(host = '0.0.0.0', debug=True, port=8080)                    #Ver que no colapse todo por usar Flask
